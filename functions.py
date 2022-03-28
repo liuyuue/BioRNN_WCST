@@ -9,6 +9,7 @@ from mpl_toolkits import mplot3d
 import seaborn as sns
 import time
 import sys
+import os
 import itertools
 import random; random.seed(0)
 import datetime
@@ -30,6 +31,7 @@ from textwrap import wrap
 
 from model import *
 from task import *
+from model_working import *
 
 # print(torch.__version__)
 # print(sys.version)
@@ -153,7 +155,7 @@ def get_default_hp():
             'n_switches': 3,
             'n_batches_per_block': int(2e8),
             'n_blocks': int(1),
-            'batch_size': int(100),
+            'batch_size': int(10),
 #             'batch_size_test': 1,
             'network_noise': 0.01,
             'input_noise_perceptual': 0.01,
@@ -171,26 +173,31 @@ def get_default_hp():
             'fdbk_to_vip': False,
             'dend_nonlinearity': 'old',    # old, v2, v3
             'trainable_dend2soma': False,
-            'divisive_dend_inh': False,
-            'divisive_dend_ei': False,
-            'divisive_dend_nonlinear': False,   
+#             'divisive_dend_inh': False,
+#             'divisive_dend_ei': False,
+#             'divisive_dend_nonlinear': False,  
+            'dendrite_type': 'additive',    # none/additive/divisive_nonlinear/divisive_ei/divisive_inh
             'scale_down_init_wexc': False,
             'grad_remove_history': True,
             'plot_during_training': False,
             'structured_sr_sst_to_sr_edend': False,
             'structured_sr_sst_to_sr_edend_branch_specific': False,
             'sparse_pfcesoma_to_srvip': 1,
+            'pos_wout': False,    # whether the readout weight for response is positive
+            'pos_wout_rule': False,    # whether the readout weight for rule is positive
             'task': 'cxtdm',
             'jobname': 'testjob',    # determined by the batch file
-            'timeit_print': False
+            'timeit_print': False,
+            'torch_seed': 1
             }
     
-    if hp['optimizer']=='adam':
-        optimizer = torch.optim.Adam
-    elif hp['optimizer']=='Rprop':
-        optimizer = torch.optim.Rprop
-    else:
-        raise NotImplementedError
+#     if hp['optimizer']=='adam':
+#         optimizer = torch.optim.Adam
+#     elif hp['optimizer']=='Rprop':
+#         optimizer = torch.optim.Rprop
+#     else:
+#         raise NotImplementedError
+    optimizer = hp['optimizer']
     
     if hp['loss_type']=='mse':
         loss_fnc = nn.MSELoss()
@@ -495,13 +502,17 @@ def plot_perf(perf_list, title='performance', xlabel='trial', ylabel='performanc
 #     print(perf_list)
 
 def plot_y_yhat(y, yhat):
-    for tr in random.sample(range(y.shape[0]), 1):    # randomly pick 5 trial to plot
+    """ plot the output of the network 
+        y: timestep * batch * feature
+    """
+    
+    for k in random.sample(range(y.shape[1]), 1):    # randomly pick a sample to plot
         fig = plt.figure(figsize=[10,4])
         fig.patch.set_facecolor('white')
         plt.style.use('classic')
-        plt.title('sample {} in a batch'.format(tr))
-        for i in range(y.shape[1]):
-            plt.plot(y.detach().cpu().numpy()[tr, i, :], label=i)
+        plt.title('sample {} in a batch'.format(k))
+        for i in range(y.shape[-1]):
+            plt.plot(y.detach().cpu().numpy()[:, k, i], label=i)
         plt.legend()
         plt.xlabel('timestep')
         plt.ylabel('y')
@@ -510,12 +521,12 @@ def plot_y_yhat(y, yhat):
         fig = plt.figure(figsize=[10,4])
         fig.patch.set_facecolor('white')
         plt.style.use('classic')
-        plt.title('sample {} in a batch, target'.format(tr))
-        for i in range(yhat.shape[1]):
-            plt.plot(yhat.detach().numpy()[tr, i, :], label=i)
+        plt.title('sample {} in a batch, target'.format(k))
+        for i in range(yhat.shape[-1]):
+            plt.plot(yhat.detach().numpy()[:, k, i], label=i)
         plt.legend()
         plt.xlabel('timestep')
-        plt.ylabel('y')
+        plt.ylabel('yhat')
         plt.show()
         
 #         fig = plt.figure(figsize=[10,4])
@@ -631,6 +642,8 @@ def test_frozen_weights(model, n_trials_test, switch_every_test, init_rule, hp, 
                                                                            input_dim=model.rnn.n['input'], 
                                                                            hp_task=hp_task_var_delay, hp=hp_copy)
             I_prev_rew, I_prev_stim, I_prev_choice = I_prev_rew.to(device), I_prev_stim.to(device), I_prev_choice.to(device)
+            trial_history = {'i_prev_rew': I_prev_rew, 'i_prev_choice': I_prev_choice, 'i_prev_stim': I_prev_stim}
+#             print(I_prev_rew[:,0,:], I_prev_choice[:,0,:], I_prev_stim[:,0,:])
 #             print('I_prev_rew shape: {}'.format(I_prev_rew.shape))
             
             
@@ -658,11 +671,14 @@ def test_frozen_weights(model, n_trials_test, switch_every_test, init_rule, hp, 
                 _x_rule.to(device)
             
             # run model forward 1 trial
-            out, data = model(input=_x, init={'h': h_init, 'i_me': i_me_init})
+            out, data = model(input=_x, init={'h': h_init, 'i_me': i_me_init}, trial_history=trial_history)
             rnn_activity = data['record']['hiddens']
             rnn_activity = torch.stack(rnn_activity, dim=0)
             h_last = data['last_states']['hidden']
             i_me_last = data['last_states']['i_me']
+#             print('printing data[record] shapes')
+#             print(len(data['record']['i_mes']), len(data['record']['hiddens']))
+#             print(data['record']['i_mes'][0].shape, data['record']['hiddens'][0].shape)
 
 #             _y, _y_rule, _, _, _, data = model(input=_x, h_init=h_init, i_me_init=i_me_init, 
 #                                                I_prev_rew=I_prev_rew, I_prev_stim=I_prev_stim, 
@@ -752,6 +768,7 @@ def test_frozen_weights(model, n_trials_test, switch_every_test, init_rule, hp, 
             stim_list.append(stim)
             resp_list.append(choice)
             i_me = np.array(torch.stack(data['record']['i_mes']).detach().cpu().numpy())
+#             print('in test_frozen_weight, i_me shape: {}'.format(i_me.shape))
             i_me_list.append(i_me)
             
 
@@ -787,6 +804,7 @@ def test_frozen_weights(model, n_trials_test, switch_every_test, init_rule, hp, 
             perf_list_test_mean = [np.mean(p) for p in perf_list_test]
             perf_rule_list_test_mean = [np.mean(p) for p in perf_rule_list_test]
             plot_perf(perf_list_test_mean, title='test performance')
+            print('y shape={}, yhat shape={}'.format(y.shape, yhat.shape))
             plot_y_yhat(y.cpu(), yhat.cpu())
 #             print('y shape={}'.format(y.shape))
             if hp_copy['train_rule']==True:
@@ -815,13 +833,13 @@ def test_frozen_weights(model, n_trials_test, switch_every_test, init_rule, hp, 
                 plt.show()
         
         if toprint==True:
-            print('mean test loss={:0.4f}, mean test perf={:0.4f}, mean test perf rule={:0.4f}, max test perf={:0.4f}, time={:0.2f}s'
+            print('mean test loss={:0.4f}, mean test perf={:0.4f}, mean test perf rule={:0.4f}, max test perf={:0.4f}, time={:0.2f}s\n'
                   .format(np.mean(loss_list), np.mean(perf_list_test), np.mean(perf_rule_list_test), 1-1/switch_every_test, time.time()-start))
-            print('switch_every_test={}, n_trials_test={}'.format(switch_every_test, n_trials_test))
+            print('switch_every_test={}, n_trials_test={}\n'.format(switch_every_test, n_trials_test))
         
         data = {'y': y, 'yhat': yhat, 'y_rule': y_rule, 'yhat_rule': yhat_rule, 'rnn_activity': activity_list, 
                'rules': rule_list, 'stims': stim_list, 'resps': resp_list, 'perfs': perf_list_test, 'perf_rules': perf_rule_list_test,
-               'i_mes': np.array(i_me_list)}
+               'i_mes': i_me_list}
         
     return np.mean(perf_list_test), np.mean(perf_rule_list_test), np.mean(loss_list), data
 
@@ -1018,19 +1036,24 @@ def load_model_v2(path_to_file, model_name, simple=False, plot=False, toprint=Tr
         saved_data = torch.load(path_to_file, map_location=torch.device('cpu'))
 #     print('load model takes {}s'.format(time.time()-start))
     hp = saved_data['hp']
-    if 'n_branches' not in hp.keys():
-#         print('yes')
-        hp['n_branches'] = 1    # some older model does not have the option to change the number of dendritic branches per neuron
+    # to fill in the more recent hps
+    hp_default, _, _ = get_default_hp()
+    for key in list(hp_default.keys()):
+        if key not in list(hp.keys()):
+            hp[key] = hp_default[key]
+#     if 'n_branches' not in hp.keys():
+# #         print('yes')
+#         hp['n_branches'] = 1    # some older model does not have the option to change the number of dendritic branches per neuron
     hp_task = saved_data['hp_task']
     
 #     print('n_branches = {}\n'.format(hp['n_branches']))
     
-#     if simple==True:
-#         model = SimpleNet_readoutSR(hp)
-#     else:
-#         model = Net_readoutSR(hp)
-#     model.load_state_dict(saved_data['model_state_dict'], strict=False)
-    model = saved_data['model'] 
+    if simple==True:
+        model = SimpleNet_readoutSR(hp)
+    else:
+        model = Net_readoutSR_working(hp)
+    model.load_state_dict(saved_data['model_state_dict'], strict=False)
+#     model = saved_data['model'] 
     optimizer = torch.optim.Adam    # just load Adam. 
     optim = optimizer(params=model.parameters(), lr=hp['learning_rate'])    # instantiate the optimizer here
     optim.load_state_dict(saved_data['optim_state_dict'])
@@ -1378,13 +1401,13 @@ def plot_single_cell(ax, cg, n, var_name, sel, rnn_activity, plot_info, hp_task,
         name = p['name']
         trials = p['trials']
         color = p['color']
-        ax.plot(np.mean(rnn_activity.detach().cpu().numpy()[trials, 0, n,:], axis=0), alpha=0.3, linewidth=10, color=color, label=name)
+        ax.plot(np.mean(rnn_activity.detach().cpu().numpy()[trials, :, 0, n], axis=0), alpha=0.3, linewidth=10, color=color, label=name)
         for tr in trials:
 #             if tr in trials:
-            ax.plot(rnn_activity[tr, 0, n, :], color=color, linewidth=0.1, alpha=1)
+            ax.plot(rnn_activity[tr, :, 0, n], color=color, linewidth=0.1, alpha=1)
     ax.legend()
     plot_task_epochs(hp_task=hp_task, hp=hp, ax=ax)
-    xticks = np.arange(0, rnn_activity.shape[-1], step=2)
+    xticks = np.arange(0, rnn_activity.shape[1], step=2)
     xticklabels = [hp['dt']*x for x in xticks]
     ax.set_xticks(xticks)
     ax.set_xticklabels(xticklabels)
@@ -1394,6 +1417,7 @@ def plot_single_cell(ax, cg, n, var_name, sel, rnn_activity, plot_info, hp_task,
 
 def plot_current(ax, sender, receiver, n, var_name, current_matrix, plot_info, hp_task, hp, model):
     """ plot_info = a list of {'name': 'x', 'trials': [1,3,5], 'color': 'blue'}
+        n: index for the receiver unit
     """
     
     plt.rc('font', size=12)
@@ -1403,13 +1427,13 @@ def plot_current(ax, sender, receiver, n, var_name, current_matrix, plot_info, h
         name = p['name']
         trials = p['trials']
         color = p['color']
-        ax.plot(np.mean(np.sum(current_matrix[trials, :, n, :][:, model.rnn.cg_idx[sender], :], axis=1), axis=0), alpha=0.3, linewidth=10, color=color, label=name)    # sum over senders, average over trials
+        ax.plot(np.mean(np.sum(current_matrix[trials, :, :, n][:, :, model.rnn.cg_idx[sender]], axis=-1), axis=0), alpha=0.3, linewidth=10, color=color, label=name)    # sum over senders, average over trials
         for tr in trials:
 #             if tr in trials:
-            ax.plot(np.sum(current_matrix[tr, model.rnn.cg_idx[sender], n, :], axis=0), color=color, linewidth=0.1, alpha=1)
+            ax.plot(np.sum(current_matrix[tr, :, model.rnn.cg_idx[sender], n], axis=0), color=color, linewidth=0.1, alpha=1)
     ax.legend()
     plot_task_epochs(hp_task=hp_task, hp=hp, ax=ax)
-    xticks = np.arange(0, current_matrix.shape[-1], step=2)
+    xticks = np.arange(0, current_matrix.shape[1], step=2)
     xticklabels = [hp['dt']*x for x in xticks]
     ax.set_xticks(xticks)
     ax.set_xticklabels(xticklabels)
@@ -1419,10 +1443,10 @@ def plot_current(ax, sender, receiver, n, var_name, current_matrix, plot_info, h
     
     
     
-def decoding(variable, neural_activity, target, cgs, decoder, model, chance, hp_task, hp, n_cv=5, plot=False):
+def decoding(variable_name, neural_activity, target, cgs, decoder, model, chance, hp_task, hp, n_cv=5, plot=False):
     """ Decode task variable from neural activity 
         Args:
-            - neural_activity: trial*neuron*timestep
+            - neural_activity: trial*neuron*timestep (update 3-16-2022: trial * timestep * neuron)
     """
     
     start = time.time()
@@ -1436,8 +1460,7 @@ def decoding(variable, neural_activity, target, cgs, decoder, model, chance, hp_
     test_accuracy = {}
     for cg in cgs:
         print(cg, neural_activity.shape, len(target), decoder, n_cv)
-        _test_accuracy = np.array([cross_validate(decoder, X=neural_activity[:,model.rnn.cg_idx[cg],t], y=target,
-                                                 cv=n_cv)['test_score'] for t in range(neural_activity.shape[-1])])
+        _test_accuracy = np.array([cross_validate(decoder, X=neural_activity[:, t, model.rnn.cg_idx[cg]], y=target, cv=n_cv)['test_score'] for t in range(neural_activity.shape[1])])
         _test_accuracy = np.transpose(_test_accuracy)    # number of folds * number of timesteps
         print('_test_accuracy shape: {}'.format(_test_accuracy.shape))
         test_accuracy[cg] = _test_accuracy
@@ -1448,7 +1471,7 @@ def decoding(variable, neural_activity, target, cgs, decoder, model, chance, hp_
         plt.style.use('classic')
         fig.patch.set_facecolor('white')
         
-        ax.set_title('{} decoding'.format(variable))
+        ax.set_title('{} decoding'.format(variable_name))
         ax.set_xlabel('Time (ms)')
         ax.set_ylabel('Decoding accuracy')
         ax.set_ylim([-0.1, 1.1])
@@ -1482,13 +1505,14 @@ def decoding(variable, neural_activity, target, cgs, decoder, model, chance, hp_
 
 
 
-def generate_neural_data_test(model, n_trials_test, switch_every_test, hp_test, hp_task_test, batch_size=1, to_plot=False):
+def generate_neural_data_test(model, n_trials_test, switch_every_test, hp_test, hp_task_test, batch_size=1, to_plot=False, concat_activity=False, compute_current=False, compute_ime=False):
+    """ generate some neural data for testing """
     
     model.rnn.batch_size = batch_size    # set batch size to 1 for testing
 
-    model.rnn.prev_rew_mag = 1
-    model.rnn.prev_choice_mag = 1
-    model.rnn.prev_stim_mag = 1
+#     model.rnn.prev_rew_mag = 1
+#     model.rnn.prev_choice_mag = 1
+#     model.rnn.prev_stim_mag = 1
     
     _, _, _, test_data = test_frozen_weights(model=model, n_trials_test=n_trials_test, switch_every_test=switch_every_test, 
                                              init_rule=random.choice(['color', 'motion']), hp=hp_test, task='cxtdm',
@@ -1499,8 +1523,9 @@ def generate_neural_data_test(model, n_trials_test, switch_every_test, hp_test, 
 
 
 
-    rnn_activity = torch.stack(test_data['rnn_activity'], dim=0)
-    rnn_activity = rnn_activity[:,0,:,:].unsqueeze(1)    # take the 1st sample in the batch
+    rnn_activity = torch.stack(test_data['rnn_activity'], dim=0)    # n_trials * seq_len * batch * neuron
+#     print('rnn_activity shape right after test_frozen_weights: {}'.format(rnn_activity.shape))
+    rnn_activity = rnn_activity[:,:,0,:].unsqueeze(2)    # take the 1st sample in the batch
 #     print('rnn_activity shape: {}'.format(rnn_activity.shape))
 
 
@@ -1510,6 +1535,9 @@ def generate_neural_data_test(model, n_trials_test, switch_every_test, hp_test, 
     startfrom_ts = int(startfrom_tr * trial_duration)    
     rnn_activity = rnn_activity[startfrom_tr:,:,:,:]    # get rid of the initial transient
     i_mes = test_data['i_mes']
+#     print(i_mes)
+    i_mes = np.stack(i_mes, axis=0)
+#     print(i_mes.shape)
     i_mes = i_mes[startfrom_tr:,:,:,:]    # get rid of the initial transient
     for key in ['rules', 'stims', 'resps', 'perfs', 'perf_rules']:
         test_data[key] = test_data[key][startfrom_tr:]    # get rid of the initial transient
@@ -1517,7 +1545,10 @@ def generate_neural_data_test(model, n_trials_test, switch_every_test, hp_test, 
 
     # concatenate activity across trials
     start = time.time()
-    rnn_activity_concat = concat_trials(rnn_activity)
+    if concat_activity==True:
+        rnn_activity_concat = concat_trials(rnn_activity)
+    else:
+        rnn_activity_concat = 'NA'
 #     print('concat takes {} seconds'.format(time.time()-start))
 #     print('shape of rnn_activity_concat: {}'.format(rnn_activity_concat.shape))
 #     print('mean of rnn_activity={}'.format(torch.mean(rnn_activity)))
@@ -1526,21 +1557,29 @@ def generate_neural_data_test(model, n_trials_test, switch_every_test, hp_test, 
 
 
     # compute current
-    rnn_activity_moved = torch.movedim(rnn_activity.squeeze(1), 1, 2)    # n_trials * n_ts * n_neurons
+    if compute_current==True:
+    #     rnn_activity_moved = torch.movedim(rnn_activity.squeeze(1), 1, 2)    # n_trials * n_ts * n_neurons
+        rnn_activity_moved = rnn_activity.squeeze(2)    # when rnn_activity is n_trials *n_timesteps * n_batches * n_neurons
+    #     print('rnn_activity shape: {}'.format(rnn_activity.shape))
 
-    n_neurons = rnn_activity.shape[-2]
-    n_timesteps = rnn_activity.shape[-1]
-    current_matrix = torch.zeros([rnn_activity.shape[0], n_timesteps, n_neurons, n_neurons])    # trial x time x neuron x neuron
-    w_rec_eff = model.rnn.effective_weight(w=model.rnn.w_rec, mask=model.rnn.mask, w_fix=model.rnn.w_fix)
+        n_neurons = rnn_activity.shape[-1]
+        n_timesteps = rnn_activity.shape[1]
+        current_matrix = torch.zeros([rnn_activity.shape[0], n_timesteps, n_neurons, n_neurons])    # trial x time x neuron x neuron
+        w_rec_eff = model.rnn.effective_weight(w=model.rnn.w_rec, mask=model.rnn.mask, w_fix=model.rnn.w_fix)
 
-    for n_sender in range(n_neurons):
-        for n_receiver in range(n_neurons):
-            current_matrix[:, :, n_sender, n_receiver] = rnn_activity_moved[:,:,n_sender] * w_rec_eff[n_sender, n_receiver]
-    current_matrix = torch.movedim(current_matrix, (-2,-1), (-3,-2))    # n_trials*n_neurons(send)*n_neurons(receive)*n_timesteps
+        for n_sender in range(n_neurons):
+            for n_receiver in range(n_neurons):
+    #             print('rnn_activity_moved shape: {}'.format(rnn_activity_moved.shape))
+    #             print('current_matrix shape: {}'.format(current_matrix.shape))
+                current_matrix[:, :, n_sender, n_receiver] = rnn_activity_moved[:,:,n_sender] * w_rec_eff[n_sender, n_receiver]
 
-    current_matrix = current_matrix.detach().cpu().numpy()
+    #     current_matrix = torch.movedim(current_matrix, (-2,-1), (-3,-2))    # n_trials*n_neurons(send)*n_neurons(receive)*n_timesteps
 
-#     print('current_matrix shape: {}'.format(current_matrix.shape))
+        current_matrix = current_matrix.detach().cpu().numpy()
+
+    #     print('current_matrix shape: {}'.format(current_matrix.shape))
+    else:
+        current_matrix = 'NA'
 
 
 
@@ -1548,7 +1587,9 @@ def generate_neural_data_test(model, n_trials_test, switch_every_test, hp_test, 
     # plot outputs
     
     if to_plot==True:
-        _rnn_activity_concat = torch.moveaxis(rnn_activity_concat, 1, 2)
+        print(rnn_activity_concat.shape)
+#         _rnn_activity_concat = torch.moveaxis(rnn_activity_concat, 1, 2)
+        _rnn_activity_concat = rnn_activity_concat
         w_out_eff = (model.rnn.w_out*model.mask_out).detach().cpu().numpy()
         y = _rnn_activity_concat@w_out_eff
 
@@ -1557,12 +1598,12 @@ def generate_neural_data_test(model, n_trials_test, switch_every_test, hp_test, 
         plt.title('output units')
         fig.patch.set_facecolor('white')
         plt.style.use('classic')
-        plt.plot(y[0,:,0], color='red', label='left')    # take the 1st sample in a batch
-        plt.plot(y[0,:,1], color='blue', label='right')
-        plt.plot(y[0,:,2], color='green', label='fixation')
-        plt.plot(test_data['yhat'][0,0,startfrom_ts:], color='red', linestyle='dashed')
-        plt.plot(test_data['yhat'][0,1,startfrom_ts:], color='blue', linestyle='dashed')
-        plt.plot(test_data['yhat'][0,2,startfrom_ts:], color='green', linestyle='dashed')
+        plt.plot(y[:, 0, 0], color='red', label='left')    # take the 1st sample in a batch
+        plt.plot(y[:, 0, 1], color='blue', label='right')
+        plt.plot(y[:, 0, 2], color='green', label='fixation')
+        plt.plot(test_data['yhat'][startfrom_ts:, 0, 0], color='red', linestyle='dashed')
+        plt.plot(test_data['yhat'][startfrom_ts:, 0, 1], color='blue', linestyle='dashed')
+        plt.plot(test_data['yhat'][startfrom_ts:, 0, 2], color='green', linestyle='dashed')
         plt.xlim([150,250])
         plt.ylim([-0.05, 1.05])
         plt.xlabel('Timestep')
@@ -1576,10 +1617,10 @@ def generate_neural_data_test(model, n_trials_test, switch_every_test, hp_test, 
         plt.title('rule outputs')
         fig.patch.set_facecolor('white')
         plt.style.use('classic')
-        plt.plot(y_rule[0,:,0], color='red', label='rule 1')    # take the 1st sample in a batch
-        plt.plot(y_rule[0,:,1], color='blue', label='rule 2')
-        plt.plot(test_data['yhat_rule'][0,0,startfrom_ts:], color='red', linestyle='dashed')
-        plt.plot(test_data['yhat_rule'][0,1,startfrom_ts:], color='blue', linestyle='dashed')
+        plt.plot(y_rule[:, 0, 0], color='red', label='rule 1')    # take the 1st sample in a batch
+        plt.plot(y_rule[:, 0, 1], color='blue', label='rule 2')
+        plt.plot(test_data['yhat_rule'][startfrom_ts:, 0, 0], color='red', linestyle='dashed')
+        plt.plot(test_data['yhat_rule'][startfrom_ts:, 0, 1], color='blue', linestyle='dashed')
         # plt.xlim([150,250])
         plt.ylim([-0.05, 1.05])
         plt.xlabel('Timestep')
@@ -1587,7 +1628,14 @@ def generate_neural_data_test(model, n_trials_test, switch_every_test, hp_test, 
         plt.legend()
         plt.show()
     
-    return {'rnn_activity': rnn_activity, 'rnn_activity_concat': rnn_activity_concat, 'current_matrix': current_matrix, 'test_data': test_data}
+    # to save memory
+    del test_data['rnn_activity']
+    del test_data['i_mes']
+    
+    if compute_ime==False:
+        return {'rnn_activity': rnn_activity, 'current_matrix': current_matrix, 'test_data': test_data}
+    elif compute_ime==True:
+        return {'rnn_activity': rnn_activity, 'current_matrix': current_matrix, 'test_data': test_data, 'i_mes': i_mes}
 
 
 
@@ -1719,6 +1767,7 @@ def compute_sel_cxtdm(rnn_activity, hp, hp_task, rule1_trs_stable, rule2_trs_sta
     rule_sel_stim = {}    # rule selectivity using the activity during the stimulus period
     resp_sel = {}    # response selectivity 
     resp_sel_normalized = {}
+    resp_sel_wout = {}
     # stim_sel = {}    # stimulus selectivity
     # cat_sel = {}    # category selectivity
     # cat_sel_normalized = {}
@@ -1739,7 +1788,7 @@ def compute_sel_cxtdm(rnn_activity, hp, hp_task, rule1_trs_stable, rule2_trs_sta
     iti_ts = np.arange(trial_history_end_ts, stim_start_ts)
     delay_ts = np.arange(stim_end_ts, resp_start_ts)
 
-    n_neurons = rnn_activity.shape[2]
+    n_neurons = rnn_activity.shape[-1]
 
     for n in range(n_neurons):
     #     if n in model.rnn.dend_idx:
@@ -1763,8 +1812,8 @@ def compute_sel_cxtdm(rnn_activity, hp, hp_task, rule1_trs_stable, rule2_trs_sta
         # rule selectivity using the average activity during a trial
     #     act_rule1 = np.mean(rnn_activity[rule1_trs_stable, 0, n, :].detach().cpu().numpy())
     #     act_rule2 = np.mean(rnn_activity[rule2_trs_stable, 0, n, :].detach().cpu().numpy())
-        act_rule1 = np.mean(rnn_activity[rule1_trs_stable, 0, n, :][:, delay_ts].detach().cpu().numpy())    # only look at delay period
-        act_rule2 = np.mean(rnn_activity[rule2_trs_stable, 0, n, :][:, delay_ts].detach().cpu().numpy())
+        act_rule1 = np.mean(rnn_activity[rule1_trs_stable, :, 0, n][:, delay_ts].detach().cpu().numpy())    # only look at delay period
+        act_rule2 = np.mean(rnn_activity[rule2_trs_stable, :, 0, n][:, delay_ts].detach().cpu().numpy())
         rule_sel_activity[n] = act_rule1 - act_rule2
 
         # normalized
@@ -1774,23 +1823,25 @@ def compute_sel_cxtdm(rnn_activity, hp, hp_task, rule1_trs_stable, rule2_trs_sta
             rule_sel_normalized_activity[n] = (act_rule1 - act_rule2)/(np.abs(act_rule1) + np.abs(act_rule2))
 
         # rule seletivity using the stimulus period activity
-        act_rule1_stim = np.mean(rnn_activity[rule1_trs_stable, 0, n, stim_start_ts:stim_end_ts].detach().cpu().numpy())
-        act_rule2_stim = np.mean(rnn_activity[rule2_trs_stable, 0, n, stim_start_ts:stim_end_ts].detach().cpu().numpy())
+        act_rule1_stim = np.mean(rnn_activity[rule1_trs_stable, stim_start_ts:stim_end_ts, 0, n].detach().cpu().numpy())
+        act_rule2_stim = np.mean(rnn_activity[rule2_trs_stable, stim_start_ts:stim_end_ts, 0, n].detach().cpu().numpy())
         rule_sel_stim[n] = act_rule1_stim - act_rule2_stim
 
         # respose selectivity
         resp_start_ts = hp_task['resp_start']//hp['dt']
         resp_end_ts = hp_task['resp_end']//hp['dt']
-        mean_left_state = np.mean(rnn_activity[left_trs_stable,0,:,resp_start_ts:resp_end_ts]
-                              .detach().cpu().numpy(), axis=(0,-1))
-        mean_right_state = np.mean(rnn_activity[right_trs_stable,0,:,resp_start_ts:resp_end_ts]
-                                   .detach().cpu().numpy(), axis=(0,-1))
+        mean_left_state = np.mean(rnn_activity[left_trs_stable, resp_start_ts:resp_end_ts, 0, :].detach().cpu().numpy(), axis=(0, 1))
+        mean_right_state = np.mean(rnn_activity[right_trs_stable, resp_start_ts:resp_end_ts, 0, :].detach().cpu().numpy(), axis=(0, 1))
         if mean_left_state[n]==0 and mean_right_state[n]==0:
             resp_sel[n] = 0
             resp_sel_normalized[n] = 0
         else:
             resp_sel_normalized[n] = (mean_left_state[n] - mean_right_state[n])/(np.abs(mean_left_state[n]) + np.abs(mean_right_state[n]))
             resp_sel[n] = mean_left_state[n] - mean_right_state[n]
+        
+        # TODO: response selectivity based on the readout weight: sel = (w_left - w_right)/(np.abs(w_left) + np.abs(w_right))
+        # Or maybe just define it in the analysis code
+        
 
 
 
@@ -1801,14 +1852,14 @@ def compute_sel_cxtdm(rnn_activity, hp, hp_task, rule1_trs_stable, rule2_trs_sta
         mean_act_color = {}    # the mean activity of each color coherence
         for color in allcolors:
             trs = [tr for tr in range(len(stims)) if stims[tr][0][0]==color]
-            mean_act_color[color] = np.mean(rnn_activity.detach().cpu().numpy()[trs, 0, n, :], axis=(0,-1))
+            mean_act_color[color] = np.mean(rnn_activity.detach().cpu().numpy()[trs, :, 0, n], axis=(0, 1))
         color_sel[n] = np.mean([np.abs(x-y) for x, y in itertools.combinations(mean_act_color.values(), 2)])
         color_sel_normalized[n] = np.mean([np.abs(x-y)/(x+y) if x!=0 and y!=0 else 0 for x, y in itertools.combinations(mean_act_color.values(), 2)])
 
         mean_act_motion = {}    # the mean activity of each motion coherence
         for motion in allmotions:
             trs = [tr for tr in range(len(stims)) if stims[tr][0][1]==motion]
-            mean_act_motion[motion] = np.mean(rnn_activity.detach().cpu().numpy()[trs, 0, n, :], axis=(0,-1))
+            mean_act_motion[motion] = np.mean(rnn_activity.detach().cpu().numpy()[trs, :, 0, n], axis=(0, 1))
         motion_sel[n] = np.mean([np.abs(x-y) for x, y in itertools.combinations(mean_act_motion.values(), 2)])
         motion_sel_normalized[n] = np.mean([np.abs(x-y)/(x+y) if x!=0 and y!=0 else 0 for x, y in itertools.combinations(mean_act_motion.values(), 2)])
 
@@ -1838,10 +1889,10 @@ def compute_sel_cxtdm(rnn_activity, hp, hp_task, rule1_trs_stable, rule2_trs_sta
     error_fdbk_trs = [tr+1 for tr in error_trials if tr!=rnn_activity.shape[0]-1]    # 1 trial after the error trial (when the network receives the error feedback)
     correct_fdbk_trs = [tr for tr in range(rnn_activity.shape[0]) if tr not in error_fdbk_trs]
 
-    FR_error = torch.mean(rnn_activity[error_fdbk_trs, 0, :, :], axis=0)
-    meanFR_error = torch.mean(FR_error[:, time_period], axis=-1)    # avg over time
-    FR_correct = torch.mean(rnn_activity[correct_fdbk_trs, 0, :, :], axis=0)
-    meanFR_correct = torch.mean(FR_correct[:, time_period], axis=-1)
+    FR_error = torch.mean(rnn_activity[error_fdbk_trs, :, 0, :], axis=0)    # avg over trials
+    meanFR_error = torch.mean(FR_error[time_period, :], axis=0)    # avg over time
+    FR_correct = torch.mean(rnn_activity[correct_fdbk_trs, :, 0, :], axis=0)
+    meanFR_correct = torch.mean(FR_correct[time_period, :], axis=0)
 
     for n in range(n_neurons):
         # error_selectivity = (act_error - act_correct)/(act_error + act_correct)
@@ -1909,7 +1960,6 @@ def define_subpop_pfc(model, rnn_activity, hp_task, hp, rule_sel, err_sel, rule1
             continue    # classify dendrites based on soma activity
 
         if np.abs(rule_sel[n])>rule_threshold and np.abs(err_sel[n])<err_threshold:    # rule neurons
-            
             # rule 1 neurons
             if rule_sel[n]>0:
                 for cg in cell_types:
@@ -1932,7 +1982,7 @@ def define_subpop_pfc(model, rnn_activity, hp_task, hp, rule_sel, err_sel, rule1
         # mix error neurons
         elif err_sel[n]>=err_threshold:
     #     elif np.mean(rnn_activity.cpu().numpy()[err_fdbk_trs, 0, n, :])>np.mean(rnn_activity.cpu().numpy()[stable_trs, 0, n, :]):
-            if np.mean(rnn_activity.cpu().numpy()[rule1_after_error_trs, 0, n, :][:, iti_ts])>np.mean(rnn_activity.cpu().numpy()[rule2_after_error_trs, 0, n, :][:, iti_ts]):    # errorxrule 1 
+            if np.mean(rnn_activity.cpu().numpy()[rule1_after_error_trs, :, 0, n][:, iti_ts])>np.mean(rnn_activity.cpu().numpy()[rule2_after_error_trs, :, 0, n][:, iti_ts]):    # errorxrule 1 
                 for cg in cell_types:
                     if n in model.rnn.cg_idx['pfc_'+cg]:
                         subcg_pfc_idx['mix_err_rule1_'+cg].append(n)
@@ -1949,7 +1999,7 @@ def define_subpop_pfc(model, rnn_activity, hp_task, hp, rule_sel, err_sel, rule1
         # mix correct neurons
         elif err_sel[n]<=-err_threshold:
     #     elif np.mean(rnn_activity.cpu().numpy()[err_fdbk_trs, 0, n, :])<=np.mean(rnn_activity.cpu().numpy()[stable_trs, 0, n, :]):
-            if np.mean(rnn_activity.cpu().numpy()[rule1_trs_stable, 0, n, :][:, iti_ts])>np.mean(rnn_activity.cpu().numpy()[rule2_trs_stable, 0, n, :][:, iti_ts]):
+            if np.mean(rnn_activity.cpu().numpy()[rule1_trs_stable, :, 0, n][:, iti_ts])>np.mean(rnn_activity.cpu().numpy()[rule2_trs_stable, :, 0, n][:, iti_ts]):
                 for cg in cell_types:
                     if n in model.rnn.cg_idx['pfc_'+cg]:
                         subcg_pfc_idx['mix_corr_rule1_'+cg].append(n)
@@ -2119,3 +2169,15 @@ def criteria_explode(data, threshold=1e2):
     return explode
 
 
+
+
+
+class HiddenPrints:
+    """ block all the print """
+    def __enter__(self):
+        self._original_stdout = sys.stdout
+        sys.stdout = open(os.devnull, 'w')
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.stdout.close()
+        sys.stdout = self._original_stdout

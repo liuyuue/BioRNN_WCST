@@ -25,6 +25,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 def get_default_hp_cxtdm():
     """ Default parameters for the task """
+    
     hp_cxtdm = {
                 # trial start time (in ms)
                 'trial_start': 0,
@@ -44,34 +45,17 @@ def get_default_hp_cxtdm():
                 'resp_start': 700,
                 # response end time
                 'resp_end': 800,
+                # response cue start time
+                'resp_cue_start': 700,
+                # response cue end time
+                'resp_cue_end': 750,
                 # trial end time
                 'trial_end': 800,
                 'trial_history_start': 0,
-                'trial_history_end': 100
+                'trial_history_end': 100,
+                'resp_cue': False
                 }
-#     hp_cxtdm = {
-#                 # trial start time
-#                 'trial_start': 0,
-#                 # fixation start time
-#                 'fix_start': 0,
-#                 # fixation end time
-#                 'fix_end': 1000,
-#                 # rule start time
-#                 'rule_start': 0,
-#                 # rule end time
-#                 'rule_end': 0,
-#                 # stimulus start time
-#                 'stim_start': 500,
-#                 # stimulus end time
-#                 'stim_end': 1000,
-#                 # response start time
-#                 'resp_start': 1500,
-#                 # response end time
-#                 'resp_end': 2500,
-#                 # trial end time
-#                 'trial_end': 2500
-#                 }
-    
+
     return hp_cxtdm
 
 
@@ -102,6 +86,7 @@ def make_task_siegel(hp, rule, n_trials, hp_cxtdm, trial_type='no_constraint'):
         - yhat: target output: step*batch*feature
                 
     """
+    
     dt = hp['dt']
     n_timesteps = int((hp_cxtdm['trial_end'] - hp_cxtdm['trial_start'])/dt)
     n_in = hp['n_input']
@@ -122,6 +107,8 @@ def make_task_siegel(hp, rule, n_trials, hp_cxtdm, trial_type='no_constraint'):
     stim_end_ts = int(hp_cxtdm['stim_end']/dt)
     resp_start_ts = int(hp_cxtdm['resp_start']/dt)
     resp_end_ts = int(hp_cxtdm['resp_end']/dt)
+    resp_cue_start_ts = int(hp_cxtdm['resp_cue_start']/dt)
+    resp_cue_end_ts = int(hp_cxtdm['resp_cue_end']/dt)
     trial_end_ts = int(hp_cxtdm['trial_end']/dt)  
             
     # check input dim
@@ -217,6 +204,12 @@ def make_task_siegel(hp, rule, n_trials, hp_cxtdm, trial_type='no_constraint'):
         x_rule[rule_start_ts:rule_end_ts, motion_rule_cue1_trs, 2] = 1
 #         x_rule[motion_rule_cue2_trs, 3, rule_start_ts:rule_end_ts] = 1
         x_rule[rule_start_ts:rule_end_ts, motion_rule_cue2_trs, 3] = 1
+    
+    # add a response cue
+#     if hp_cxtdm['resp_cue']==True:
+#         x[resp_cue_start_ts:resp_cue_end_ts, :, 5] = 1
+    
+    
     # add noise to sensory input
 #     x[:, 1:5, stim_start_ts:stim_end_ts] += hp['input_noise_perceptual'] * torch.normal(mean=torch.zeros(n_trials, 4, int(stim_end_ts-stim_start_ts)), std=1)
     x[stim_start_ts:stim_end_ts, :, 1:5] += hp['input_noise_perceptual'] * torch.normal(mean=torch.zeros(int(stim_end_ts-stim_start_ts), n_trials, 4), std=1)

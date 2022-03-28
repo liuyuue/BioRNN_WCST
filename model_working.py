@@ -7,8 +7,8 @@ import itertools
 import random; random.seed(0)
 import datetime
 import copy
-import scipy
 
+# This is added by VScode
 
 
 class BioRNN_working(torch.nn.Module):
@@ -57,13 +57,16 @@ class BioRNN_working(torch.nn.Module):
         self.fdbk_to_vip = hp['fdbk_to_vip']
         self.dend_nonlinearity = hp['dend_nonlinearity']
         self.trainable_dend2soma = hp['trainable_dend2soma']
-        self.divisive_dend_inh = hp['divisive_dend_inh']
-        self.divisive_dend_ei = hp['divisive_dend_ei']
-        self.divisive_dend_nonlinear = hp['divisive_dend_nonlinear']
+#         self.divisive_dend_inh = hp['divisive_dend_inh']
+#         self.divisive_dend_ei = hp['divisive_dend_ei']
+#         self.divisive_dend_nonlinear = hp['divisive_dend_nonlinear']
+        self.dendrite_type = hp['dendrite_type']
+        if self.dendrite_type not in ['divisive_inh', 'divisive_ei', 'divisive_nonlinear', 'additive', 'none']:
+            raise ValueError('Dendrite type not recognized!')
         self.scale_down_init_wexc = hp['scale_down_init_wexc']
-        self.prev_rew_mag = 1
-        self.prev_stim_mag = 1
-        self.prev_choice_mag = 1
+#         self.prev_rew_mag = 1
+#         self.prev_stim_mag = 1
+#         self.prev_choice_mag = 1
         self.activation = hp['activation']
         self.k_relu_satu = hp['k_relu_satu']
         self.sparse_pfcesoma_to_srvip = hp['sparse_pfcesoma_to_srvip']
@@ -167,7 +170,7 @@ class BioRNN_working(torch.nn.Module):
         
         # make PFC->SR VIP projection sparse
         if self.sparse_pfcesoma_to_srvip!=1:
-            print('make PFC to SR VIP connections sparse, sparsity={}'.format(self.sparse_pfcesoma_to_srvip))
+            print('make PFC to SR VIP connections sparse, sparsity={}\n'.format(self.sparse_pfcesoma_to_srvip))
             if self.sparse_pfcesoma_to_srvip>1:
                 raise ValueError('sparsity cannot > 1!')
             if (self.mask[np.ix_(self.cg_idx['pfc_esoma'], self.cg_idx['sr_vip'])]==0).all()==True:
@@ -176,8 +179,8 @@ class BioRNN_working(torch.nn.Module):
             for n in self.cg_idx['sr_vip']:
                 disconnect_idx = random.sample(list(self.cg_idx['pfc_esoma']), n_disconnected)
                 self.mask[disconnect_idx, n] = 0
-                print('SR VIP #{}, disconnect with PFC Esoma {}'.format(n, disconnect_idx))
-                print(len(disconnect_idx))
+#                 print('SR VIP #{}, disconnect with PFC Esoma {}'.format(n, disconnect_idx))
+#                 print(len(disconnect_idx))
             
         # divide SR SST and SR VIP into two subpopulations
         if self.divide_sr_sst_vip==True:
@@ -186,7 +189,7 @@ class BioRNN_working(torch.nn.Module):
             self.cg_idx['sr_vip_2'] = np.array([n for n in self.cg_idx['sr_vip'] if n not in self.cg_idx['sr_vip_1']])
             self.cg_idx['sr_sst_1'] = np.arange(self.cg_idx['sr_sst'][0], self.cg_idx['sr_sst'][0]+len(self.cg_idx['sr_sst'])//2)
             self.cg_idx['sr_sst_2'] = np.array([n for n in self.cg_idx['sr_sst'] if n not in self.cg_idx['sr_sst_1']])
-            print('sr_vip_1 idx: {},\nsr_vip_2 idx: {},\nsr_sst_1 idx: {},\nsr_sst_2 idx: {}\n'.format(self.cg_idx['sr_vip_1'], self.cg_idx['sr_vip_2'], self.cg_idx['sr_sst_1'], self.cg_idx['sr_sst_2']))
+#             print('sr_vip_1 idx: {},\nsr_vip_2 idx: {},\nsr_sst_1 idx: {},\nsr_sst_2 idx: {}\n'.format(self.cg_idx['sr_vip_1'], self.cg_idx['sr_vip_2'], self.cg_idx['sr_sst_1'], self.cg_idx['sr_sst_2']))
             self.mask[np.ix_(self.cg_idx['sr_vip_1'], self.cg_idx['sr_sst_2'])] = 0    # assume VIP and SST from different subpopulations don't connect to each other
             self.mask[np.ix_(self.cg_idx['sr_vip_2'], self.cg_idx['sr_sst_1'])] = 0
             self.mask[np.ix_(self.cg_idx['sr_sst_1'], self.cg_idx['sr_vip_2'])] = 0
@@ -200,11 +203,11 @@ class BioRNN_working(torch.nn.Module):
             if self.n['sr_edend']%self.n['sr_sst']!=0:
                 raise ValueError('# SR Edend is not an integer of # SR SST!')
             for n_srsst in range(self.n['sr_sst']):
-                print('n_srsst={}'.format(n_srsst))
+#                 print('n_srsst={}'.format(n_srsst))
                 n_sredend_start = self.cg_idx['sr_edend'][0] + n_dend_per_sst*n_srsst
                 n_sredend_end = n_sredend_start + n_dend_per_sst
                 self.mask[self.cg_idx['sr_sst'][n_srsst], n_sredend_start:n_sredend_end] = -1  
-                print('sst idx: {}, start: {}, end: {}'.format(self.cg_idx['sr_sst'][n_srsst], n_sredend_start, n_sredend_end))
+#                 print('sst idx: {}, start: {}, end: {}'.format(self.cg_idx['sr_sst'][n_srsst], n_sredend_start, n_sredend_end))
                 
         # branch specific: in a given E cell, one branch is targeted by SST group 1, the other by SST group 2
         if self.structured_sr_sst_to_sr_edend_branch_specific==True:
@@ -214,8 +217,8 @@ class BioRNN_working(torch.nn.Module):
             dend2_idx = np.array([nd for nd in self.cg_idx['sr_edend'] if nd not in dend1_idx])
             self.mask[np.ix_(self.cg_idx['sr_sst_1'], dend1_idx)] = -1
             self.mask[np.ix_(self.cg_idx['sr_sst_2'], dend2_idx)] = -1
-            print(self.cg_idx['sr_sst_1'], dend1_idx)
-            print(self.cg_idx['sr_sst_2'], dend2_idx)
+#             print(self.cg_idx['sr_sst_1'], dend1_idx)
+#             print(self.cg_idx['sr_sst_2'], dend2_idx)
                 
         # TODO structured sr_esoma to sr_sst
         if False:    # cross inhibition from SR Esoma to SR SST
@@ -231,14 +234,18 @@ class BioRNN_working(torch.nn.Module):
         elif self.trainable_dend2soma==True:
             print('trainable dendrite to soma coupling\n')
             self.dend2soma = nn.Parameter(torch.Tensor([1]), requires_grad=True)
-        if self.divisive_dend_inh==True or self.divisive_dend_ei==True:
-            print('using divisive dendrites\n')
-            if self.divisive_dend_inh==True:
-                print('inhibition-controlled division\n')
-            elif self.divisive_dend_ei==True:
-                print('EI-controlled division\n')
-            if self.trainable_dend2soma==True:
-                raise ValueError('when using divisive dendrite, should set the dend2soma to 0!')
+#         if self.divisive_dend_inh==True or self.divisive_dend_ei==True:
+#             print('using divisive dendrites\n')
+#             if self.divisive_dend_inh==True:
+#                 print('inhibition-controlled division\n')
+#             elif self.divisive_dend_ei==True:
+#                 print('EI-controlled division\n')
+#             if self.trainable_dend2soma==True:
+#                 raise ValueError('when using divisive dendrite, should set the dend2soma to 0!')
+#             self.dend2soma = nn.Parameter(torch.Tensor([0]), requires_grad=False)
+#             print('setting dend2soma to 0\n')
+        if 'divisive' in self.dendrite_type:
+            print('divisive dendrite type: {}\n'.format(self.dendrite_type))
             self.dend2soma = nn.Parameter(torch.Tensor([0]), requires_grad=False)
             print('setting dend2soma to 0\n')
             
@@ -299,8 +306,8 @@ class BioRNN_working(torch.nn.Module):
             self.bias = nn.Parameter(torch.zeros(self.total_n_neurons), requires_grad=False)    # fix bias at 0 so that the net has a trivial fixed point at 0
             self.mask_bias = nn.Parameter(torch.ones(self.total_n_neurons), requires_grad=False)
             self.mask_bias[self.dend_idx] = 0
-        elif self.sr_sst_high_bias==True:
-            print('SR SST has high bias')
+        elif self.sr_sst_high_bias==True:    # initialize SST bias at a high value but allow change during training
+            print('SR SST has high bias\n')
             self.bias = nn.Parameter(torch.zeros(self.total_n_neurons), requires_grad=True)
             self.mask_bias = nn.Parameter(torch.zeros(self.total_n_neurons), requires_grad=False)
             self.mask_bias[self.cg_idx['sr_sst']] = 1
@@ -433,8 +440,7 @@ class BioRNN_working(torch.nn.Module):
 #                 self.bias[self.cg_idx['sr_sst']] = 2    # this way the bias would not change!
 #                 self.bias.requires_grad = True
                 torch.nn.init.constant_(self.bias, 1)
-                print(self.bias[self.cg_idx['sr_sst']])
-                print('\n')
+                print('initializing SR SST bias to be {}\n'.format(self.bias[self.cg_idx['sr_sst']]))
         else:
             raise NotImplementedError
 
@@ -592,7 +598,7 @@ class BioRNN_working(torch.nn.Module):
         # project input into the network
         total_input = input@self.w_in_eff
         if 'trial_history' in kwargs:    # add the trial history input
-            total_input += kwargs['history']['i_prev_rew']@self.w_prev_rew_eff + kwargs['history']['i_prev_choice']@self.w_prev_choice_eff + kwargs['history']['i_prev_rew']@self.w_prev_stim_eff
+            total_input += kwargs['trial_history']['i_prev_rew']@self.w_prev_rew_eff + kwargs['trial_history']['i_prev_choice']@self.w_prev_choice_eff + kwargs['trial_history']['i_prev_stim']@self.w_prev_stim_eff
         
         if self.time_it==True:
             print('before looping over time takes {:.2e}s'.format(time.time()-start))
@@ -601,12 +607,17 @@ class BioRNN_working(torch.nn.Module):
         for t in range(n_steps): 
 #             start_loop = time.time()     
             if self.time_it==True:
-                print('t = {}'.format(t))
+                print('\tt = {}'.format(t))
             
             # compute E and I input separately
+            if self.time_it==True:
+                start_computeEI = time.time()
             if not (len(self.dend_idx)==0 and self.mglur==False):   # in which case separate E and I inputs are needed to update dendrites or compute mGluR current
-                i_exc = hidden[:,self.e_idx]@self.w_rec_eff[self.e_idx, :] + input[t,:,:]@self.w_in_eff
+#                 i_exc = hidden[:,self.e_idx]@self.w_rec_eff[self.e_idx, :] + input[t,:,:]@self.w_in_eff
+                i_exc = hidden[:,self.e_idx]@self.w_rec_eff[self.e_idx, :] + total_input[t,:,:]    # TODO: should be this??
                 i_inh = hidden[:,self.i_idx]@self.w_rec_eff[self.i_idx, :]
+            if self.time_it==True:
+                print('\tcompute EI currents takes {:.2e}s, cumulative {:.2e}s'.format(time.time()-start_computeEI, time.time()-start), flush=True)  
             
             # compute mGluR current
             if self.time_it==True:
@@ -620,18 +631,19 @@ class BioRNN_working(torch.nn.Module):
                 else:
                     i_me = (1-self.alpha_me)*i_me + self.alpha_me*i_exc[:, self.mglur_e_idx]
             elif self.mglur==False:
-                i_me = torch.Tensor(0)
-            i_mes.append(i_me)
+                i_me = torch.zeros([self.batch_size, self.total_n_neurons]).to(device)
             if self.time_it==True:
-                print('calculate mGluR takes {:.2e}s'.format(time.time()-start_mglur))  
+                print('\tcalculate mGluR takes {:.2e}s, cumulative {:.2e}s'.format(time.time()-start_mglur, time.time()-start), flush=True)  
                 
             
             # update soma
             start_updatesoma = time.time()
             # TODO: change to "if self.dendrite_type=='additive' or something like that"
-            if self.divisive_dend_inh==False and self.divisive_dend_ei==False and self.divisive_dend_nonlinear==False:
+#             if self.divisive_dend_inh==False and self.divisive_dend_ei==False and self.divisive_dend_nonlinear==False:
+            if self.dendrite_type=='additive':
                 next_h = (1-self.decay)*hidden + self.decay*self.nonlinearity_soma(input_current=hidden@self.w_rec_eff + total_input[t,:,:] + self.mask_bias*self.bias, nonlinearity=self.activation, k_relu_satu=self.k_relu_satu)
-            elif self.divisive_dend_inh==True or self.divisive_dend_ei==True:
+#             elif self.divisive_dend_inh==True or self.divisive_dend_ei==True:
+            elif self.dendrite_type=='divisive_ei' or self.dendrite_type=='divisive_inh':
                 input_dend_e_sum_sr = i_exc[:, self.dend_idx_sr].reshape((self.batch_size, self.n_branches, -1))
                 input_dend_e_sum_sr = torch.sum(input_dend_e_sum_sr, axis=1)    # sum of exc current that goes into all the branches
                 input_dend_i_sum_sr = i_inh[:, self.dend_idx_sr].reshape((self.batch_size, self.n_branches, -1))
@@ -640,15 +652,18 @@ class BioRNN_working(torch.nn.Module):
                 input_dend_e_sum_pfc = torch.sum(input_dend_e_sum_pfc, axis=1)    # sum of exc current that goes into all the branches
                 input_dend_i_sum_pfc = i_inh[:, self.dend_idx_pfc].reshape((self.batch_size, self.n_branches, -1))
                 input_dend_i_sum_pfc = torch.sum(input_dend_i_sum_pfc, axis=1)    # sum of exc current that goes into all the branches
-                input_dend_e_sum = torch.cat((input_dend_e_sum_sr, input_dend_e_sum_pfc), axis=1)
+                input_dend_e_sum = torch.cat((input_dend_e_sum_sr, input_dend_e_sum_pfc), axis=1)    # concat SR and PFC
                 input_dend_i_sum = torch.cat((input_dend_i_sum_sr, input_dend_i_sum_pfc), axis=1)
-                if self.divisive_dend_inh==True:
+#                 if self.divisive_dend_inh==True:
+                if self.dendrite_type=='divisive_inh':
                     gain = torch.sigmoid(input_dend_i_sum)
                     total_input[t, : ,self.esoma_idx] += input_dend_e_sum
-                elif self.divisive_dend_ei==True:
+                elif self.dendrite_type=='divisive_ei':
+#                 elif self.divisive_dend_ei==True:
                     gain = torch.sigmoid(input_dend_i_sum + input_dend_e_sum)
                 next_h[:, self.esoma_idx] = (1-self.decay)*hidden[:, self.esoma_idx] + self.decay*gain*self.nonlinearity_soma(input_current=total_input[t, :, self.esoma_idx] + self.mask_bias[self.esoma_idx]*self.bias[self.esoma_idx], nonlinearity=self.activation, k_relu_satu=self.k_relu_satu) 
-            elif self.divisive_dend_nonlinear==True:
+#             elif self.divisive_dend_nonlinear==True:
+            elif self.dendrite_type=='divisive_nonlinear':
                 dend_sum_sr = hidden[:, self.dend_idx_sr].reshape((self.batch_size, self.n_branches, -1))
                 dend_sum_sr = torch.sum(dend_sum_sr, axis=1)   # sum over branches
                 dend_sum_pfc = hidden[:, self.dend_idx_pfc].reshape((self.batch_size, self.n_branches, -1))
@@ -656,31 +671,40 @@ class BioRNN_working(torch.nn.Module):
                 gain = torch.cat((dend_sum_sr, dend_sum_pfc), axis=1)
                 next_h[:, self.esoma_idx] = (1-self.decay)*hidden[:, self.esoma_idx] + self.decay*gain*self.nonlinearity_soma(input_current=total_input[t, :, self.esoma_idx] + self.mask_bias[self.esoma_idx]*self.bias[self.esoma_idx], nonlinearity=self.activation, k_relu_satu=self.k_relu_satu) 
             if self.time_it==True:
-                print('update soma takes {:.2e}s'.format(time.time()-start_updatesoma), flush=True)   
+                print('\tupdate soma takes {:.2e}s, cumulative {:.2e}s'.format(time.time()-start_updatesoma, time.time()-start), flush=True)   
 
             # update dendrite
             if self.time_it==True:
                 start_updatedend = time.time()
             if len(self.dend_idx)!=0:
-                if self.divisive_dend_inh==True:
+#                 if self.divisive_dend_inh==True:
+                if self.dendrite_type=='divisive_inh':
                     next_h[:,self.dend_idx] = i_inh[:,self.dend_idx]
-                elif self.divisive_dend_ei==True:
+#                 elif self.divisive_dend_ei==True:
+                elif self.dendrite_type=='divisive_ei':
                     next_h[:,self.dend_idx] = i_exc[:,self.dend_idx] + i_inh[:,self.dend_idx]
-                else:
+                elif self.dendrite_type=='additive' or self.dendrite_type=='divisive_nonlinear':
                     next_h[:,self.dend_idx] = self.nonlinearity_dend(nonlinearity=self.dend_nonlinearity, g_e=i_exc[:,self.dend_idx], g_i=torch.abs(i_inh[:,self.dend_idx]))
             if self.time_it==True:
-                print('update dendrite takes {:.2e}s'.format(time.time()-start_updatedend), flush=True)   
+                print('\tupdate dendrite takes {:.2e}s, cumulative {:.2e}s'.format(time.time()-start_updatedend, time.time()-start), flush=True)   
                 
             # add noise
+            if self.time_it==True:
+                start_addnoise = time.time()
             next_h += self.network_noise*torch.randn_like(next_h)    # add some noise
             hidden = next_h
+            if self.time_it==True:
+                print('\tadd noise takes {:.2e}s, cumulative {:.2e}s'.format(time.time()-start_addnoise, time.time()-start), flush=True)
          
             # collect stuff
-            start_collect = time.time()
+            if self.time_it==True:
+#             print(kwargs.keys())
+#             if kwargs['hp']['time_it']==True:
+                start_collect = time.time()
             hiddens.append(hidden)
             i_mes.append(i_me)
             if self.time_it==True:
-                print('collect stuff takes {:.2e}s'.format(time.time()-start_collect), flush=True)
+                print('\tcollect stuff takes {:.2e}s, cumulative {:.2e}s'.format(time.time()-start_collect, time.time()-start), flush=True)
         
         # last state
         if self.time_it==True:
@@ -688,8 +712,9 @@ class BioRNN_working(torch.nn.Module):
         h_last = hidden     # the state at the last timepoint
         i_me_last = i_me
         if self.time_it==True:
-            print('everything after the loop takes {:.2e}s'.format(time.time()-start_afterloop))
-            
+            print('everything after the loop takes {:.2e}s, cumulative {:.2e}s'.format(time.time()-start_afterloop, time.time()-start))
+            print('total time for the forward pass: {:.2e}s'.format(time.time()-start))
+        
         last_states = {'hidden': h_last, 'i_me': i_me_last}
         record = {'hiddens': hiddens, 'i_mes': i_mes}
         
@@ -707,23 +732,29 @@ class Net_readoutSR_working(torch.nn.Module):
     def __init__(self, hp, **kwargs):
         super().__init__()
         self.rnn = BioRNN_working(hp)
+        self.pos_wout = hp['pos_wout']
+        self.pos_wout_rule = hp['pos_wout_rule']
         self.mask_out = nn.Parameter(torch.zeros(self.rnn.total_n_neurons, self.rnn.n['output']), requires_grad=False)    # the mask for the input weights
         self.mask_out[self.rnn.cg_idx['sr_esoma'], :] = 1    # long range connections are excitatory
         if self.rnn.train_rule==True:
             self.mask_out_rule = nn.Parameter(torch.zeros(self.rnn.w_out_rule.shape), requires_grad=False)
             self.mask_out_rule[self.rnn.cg_idx['pfc_esoma'], :] = 1    # long range connections are excitatory
            
-    def forward(self, input, init, **kwargs):        
-        last_states, record = self.rnn(input, init)
+    def forward(self, input, init, **kwargs):
+        last_states, record = self.rnn(input, init, trial_history=kwargs['trial_history'])
         # compute output
-        self.w_out_eff = self.rnn.w_out*self.mask_out
+        if self.pos_wout==False:
+            self.w_out_eff = self.rnn.w_out*self.mask_out
+        elif self.pos_wout==True:
+            self.w_out_eff = self.rnn.effective_weight(w=self.rnn.w_out, mask=self.mask_out)
         rnn_activity = torch.stack(record['hiddens'], dim=0)
         out = rnn_activity@self.w_out_eff
-#         out = torch.movedim(out, 0, -1) 
         if self.rnn.train_rule==True:
-            self.w_out_rule_eff = self.rnn.w_out_rule*self.mask_out_rule
+            if self.pos_wout_rule==False:
+                self.w_out_rule_eff = self.rnn.w_out_rule*self.mask_out_rule
+            elif self.pos_wout_rule==True:
+                self.w_out_rule_eff = self.rnn.effective_weight(w=self.rnn.w_out_rule, mask=self.mask_out_rule)
             out_rule = rnn_activity@self.w_out_rule_eff
-#             out_rule = torch.movedim(out_rule, 0, -1)
         else:
             out_rule = 0
             
