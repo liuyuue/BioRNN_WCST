@@ -246,7 +246,7 @@ class BioRNN_working(torch.nn.Module):
 #             print('setting dend2soma to 0\n')
         if 'divisive' in self.dendrite_type:
             print('divisive dendrite type: {}\n'.format(self.dendrite_type))
-            self.dend2soma = nn.Parameter(torch.Tensor([0]), requires_grad=False)
+            self.dend2soma = nn.Parameter(torch.Tensor([0]), requires_grad=False)    # TODO: this needs change!!
             print('setting dend2soma to 0\n')
             
         # multiple dendritic branches per soma
@@ -575,6 +575,7 @@ class BioRNN_working(torch.nn.Module):
         
         n_steps = input.shape[0]
         hiddens = []
+        hidden_dict = {}    # test, delete later
         i_mes = []
         device = next(self.parameters()).device
         
@@ -605,7 +606,6 @@ class BioRNN_working(torch.nn.Module):
     
         # start the loop over time
         for t in range(n_steps): 
-#             start_loop = time.time()     
             if self.time_it==True:
                 print('\tt = {}'.format(t))
             
@@ -635,45 +635,9 @@ class BioRNN_working(torch.nn.Module):
             if self.time_it==True:
                 print('\tcalculate mGluR takes {:.2e}s, cumulative {:.2e}s'.format(time.time()-start_mglur, time.time()-start), flush=True)  
                 
-            
-            # update soma
-            start_updatesoma = time.time()
-            # TODO: change to "if self.dendrite_type=='additive' or something like that"
-#             if self.divisive_dend_inh==False and self.divisive_dend_ei==False and self.divisive_dend_nonlinear==False:
-            if self.dendrite_type=='additive':
-                next_h = (1-self.decay)*hidden + self.decay*self.nonlinearity_soma(input_current=hidden@self.w_rec_eff + total_input[t,:,:] + self.mask_bias*self.bias, nonlinearity=self.activation, k_relu_satu=self.k_relu_satu)
-#             elif self.divisive_dend_inh==True or self.divisive_dend_ei==True:
-            elif self.dendrite_type=='divisive_ei' or self.dendrite_type=='divisive_inh':
-                input_dend_e_sum_sr = i_exc[:, self.dend_idx_sr].reshape((self.batch_size, self.n_branches, -1))
-                input_dend_e_sum_sr = torch.sum(input_dend_e_sum_sr, axis=1)    # sum of exc current that goes into all the branches
-                input_dend_i_sum_sr = i_inh[:, self.dend_idx_sr].reshape((self.batch_size, self.n_branches, -1))
-                input_dend_i_sum_sr = torch.sum(input_dend_i_sum_sr, axis=1)    # sum of exc current that goes into all the branches
-                input_dend_e_sum_pfc = i_exc[:, self.dend_idx_pfc].reshape((self.batch_size, self.n_branches, -1))
-                input_dend_e_sum_pfc = torch.sum(input_dend_e_sum_pfc, axis=1)    # sum of exc current that goes into all the branches
-                input_dend_i_sum_pfc = i_inh[:, self.dend_idx_pfc].reshape((self.batch_size, self.n_branches, -1))
-                input_dend_i_sum_pfc = torch.sum(input_dend_i_sum_pfc, axis=1)    # sum of exc current that goes into all the branches
-                input_dend_e_sum = torch.cat((input_dend_e_sum_sr, input_dend_e_sum_pfc), axis=1)    # concat SR and PFC
-                input_dend_i_sum = torch.cat((input_dend_i_sum_sr, input_dend_i_sum_pfc), axis=1)
-#                 if self.divisive_dend_inh==True:
-                if self.dendrite_type=='divisive_inh':
-                    gain = torch.sigmoid(input_dend_i_sum)
-                    total_input[t, : ,self.esoma_idx] += input_dend_e_sum
-                elif self.dendrite_type=='divisive_ei':
-#                 elif self.divisive_dend_ei==True:
-                    gain = torch.sigmoid(input_dend_i_sum + input_dend_e_sum)
-                next_h[:, self.esoma_idx] = (1-self.decay)*hidden[:, self.esoma_idx] + self.decay*gain*self.nonlinearity_soma(input_current=total_input[t, :, self.esoma_idx] + self.mask_bias[self.esoma_idx]*self.bias[self.esoma_idx], nonlinearity=self.activation, k_relu_satu=self.k_relu_satu) 
-#             elif self.divisive_dend_nonlinear==True:
-            elif self.dendrite_type=='divisive_nonlinear':
-                dend_sum_sr = hidden[:, self.dend_idx_sr].reshape((self.batch_size, self.n_branches, -1))
-                dend_sum_sr = torch.sum(dend_sum_sr, axis=1)   # sum over branches
-                dend_sum_pfc = hidden[:, self.dend_idx_pfc].reshape((self.batch_size, self.n_branches, -1))
-                dend_sum_pfc = torch.sum(dend_sum_pfc, axis=1)   # sum over branches
-                gain = torch.cat((dend_sum_sr, dend_sum_pfc), axis=1)
-                next_h[:, self.esoma_idx] = (1-self.decay)*hidden[:, self.esoma_idx] + self.decay*gain*self.nonlinearity_soma(input_current=total_input[t, :, self.esoma_idx] + self.mask_bias[self.esoma_idx]*self.bias[self.esoma_idx], nonlinearity=self.activation, k_relu_satu=self.k_relu_satu) 
-            if self.time_it==True:
-                print('\tupdate soma takes {:.2e}s, cumulative {:.2e}s'.format(time.time()-start_updatesoma, time.time()-start), flush=True)   
-
+                
             # update dendrite
+            # TODO: update dend first?
             if self.time_it==True:
                 start_updatedend = time.time()
             if len(self.dend_idx)!=0:
@@ -685,8 +649,68 @@ class BioRNN_working(torch.nn.Module):
                     next_h[:,self.dend_idx] = i_exc[:,self.dend_idx] + i_inh[:,self.dend_idx]
                 elif self.dendrite_type=='additive' or self.dendrite_type=='divisive_nonlinear':
                     next_h[:,self.dend_idx] = self.nonlinearity_dend(nonlinearity=self.dend_nonlinearity, g_e=i_exc[:,self.dend_idx], g_i=torch.abs(i_inh[:,self.dend_idx]))
+#                     print('max in next_h[dend]: {}'.format(torch.max(next_h[:, self.dend_idx])))
+#                     print('g_e={}, g_i={}'.format(i_exc[:,self.dend_idx], i_inh[:,self.dend_idx]))
+#                     print('next_h[dend]={}'.format(next_h[:, self.dend_idx]))
             if self.time_it==True:
                 print('\tupdate dendrite takes {:.2e}s, cumulative {:.2e}s'.format(time.time()-start_updatedend, time.time()-start), flush=True)   
+            
+            
+            # update soma
+            start_updatesoma = time.time()
+            # TODO: change to "if self.dendrite_type=='additive' or something like that"
+#             if self.divisive_dend_inh==False and self.divisive_dend_ei==False and self.divisive_dend_nonlinear==False:
+            if self.dendrite_type=='additive':
+                next_h = (1-self.decay)*hidden + self.decay*self.nonlinearity_soma(input_current=hidden@self.w_rec_eff + total_input[t,:,:] + self.mask_bias*self.bias, nonlinearity=self.activation, k_relu_satu=self.k_relu_satu)
+#             elif self.divisive_dend_inh==True or self.divisive_dend_ei==True:
+            elif self.dendrite_type=='divisive_ei' or self.dendrite_type=='divisive_inh' or self.dendrite_type=='divisive_nonlinear':
+                gain = torch.ones([self.batch_size, self.total_n_neurons])    # initialize gain
+                input_dend_e_sum_sr = i_exc[:, self.dend_idx_sr].reshape((self.batch_size, self.n_branches, -1))
+                input_dend_e_sum_sr = torch.sum(input_dend_e_sum_sr, axis=1)    # sum of exc current that goes into all the branches
+                input_dend_i_sum_sr = i_inh[:, self.dend_idx_sr].reshape((self.batch_size, self.n_branches, -1))
+                input_dend_i_sum_sr = torch.sum(input_dend_i_sum_sr, axis=1)    # sum of exc current that goes into all the branches
+                input_dend_e_sum_pfc = i_exc[:, self.dend_idx_pfc].reshape((self.batch_size, self.n_branches, -1))
+                input_dend_e_sum_pfc = torch.sum(input_dend_e_sum_pfc, axis=1)    # sum of exc current that goes into all the branches
+                input_dend_i_sum_pfc = i_inh[:, self.dend_idx_pfc].reshape((self.batch_size, self.n_branches, -1))
+                input_dend_i_sum_pfc = torch.sum(input_dend_i_sum_pfc, axis=1)    # sum of exc current that goes into all the branches
+                input_dend_e_sum = torch.cat((input_dend_e_sum_sr, input_dend_e_sum_pfc), axis=1)    # concat SR and PFC
+                input_dend_i_sum = torch.cat((input_dend_i_sum_sr, input_dend_i_sum_pfc), axis=1)
+#                 print(input_dend_e_sum.shape, input_dend_i_sum.shape)
+#                 if self.divisive_dend_inh==True:
+                if self.dendrite_type=='divisive_inh':
+                    raise ValueError('needs change!')
+#                     gain = torch.sigmoid(input_dend_i_sum)
+#                     total_input[t, : ,self.esoma_idx] += input_dend_e_sum
+#                     next_h[:, self.esoma_idx] = (1-self.decay)*hidden[:, self.esoma_idx] + self.decay*gain*self.nonlinearity_soma(input_current=total_input[t, :, self.esoma_idx] + self.mask_bias[self.esoma_idx]*self.bias[self.esoma_idx], nonlinearity=self.activation, k_relu_satu=self.k_relu_satu) 
+                elif self.dendrite_type=='divisive_ei': 
+                    raise ValueError('needs change!')
+# #                 elif self.divisive_dend_ei==True:
+#                     gain = torch.sigmoid(input_dend_i_sum + input_dend_e_sum)
+#                     # TODO: this is also problematic - the current to the dend does not get passed to soma. maybe add "total_input[t, : ,self.esoma_idx] += input_dend_e_sum + input_dend_i_sum" here
+#                     next_h[:, self.esoma_idx] = (1-self.decay)*hidden[:, self.esoma_idx] + self.decay*gain*self.nonlinearity_soma(input_current=total_input[t, :, self.esoma_idx] + self.mask_bias[self.esoma_idx]*self.bias[self.esoma_idx], nonlinearity=self.activation, k_relu_satu=self.k_relu_satu) 
+# #             elif self.divisive_dend_nonlinear==True:
+                elif self.dendrite_type=='divisive_nonlinear':
+    #                 print('hidden[dend_idx_sr]={}'.format(hidden[:, self.dend_idx_sr]))
+                    dend_sum_sr = hidden[:, self.dend_idx_sr].reshape((self.batch_size, self.n_branches, -1))
+                    dend_sum_sr = torch.sum(dend_sum_sr, axis=1)   # sum over branches
+    #                 print('hidden[dend_idx_pfc]={}'.format(hidden[:, self.dend_idx_pfc]))
+                    dend_sum_pfc = hidden[:, self.dend_idx_pfc].reshape((self.batch_size, self.n_branches, -1))
+                    dend_sum_pfc = torch.sum(dend_sum_pfc, axis=1)   # sum over branches
+#                     gain = torch.cat((dend_sum_sr, dend_sum_pfc), axis=1)    # nbatches * nEsomas
+#                     gain = torch.relu(gain)/2    # so that it is always between 0 and 1
+                    gain[:, self.cg_idx['sr_esoma']] = dend_sum_sr/2    # the gain of soma depends on the sum of the dendritic current
+                    gain[:, self.cg_idx['pfc_esoma']] = dend_sum_pfc/2
+    #                 print('dend_sum_sr={}, dend_sum_pfc={}, gain={}'.format(dend_sum_sr, dend_sum_pfc, gain))
+                    print('max gain among E somas={}'.format(torch.max(gain[:, self.esoma_idx])))
+#                     next_h[:, self.esoma_idx] = (1-self.decay)*hidden[:, self.esoma_idx] + self.decay*gain*self.nonlinearity_soma(input_current=total_input[t, :, self.esoma_idx] + input_dend_e_sum + input_dend_i_sum + self.mask_bias[self.esoma_idx]*self.bias[self.esoma_idx], nonlinearity=self.activation, k_relu_satu=self.k_relu_satu) 
+                    # TODO: update PV and others!!!!
+                    total_input[t, :, self.cg_idx['sr_esoma']] += input_dend_e_sum_sr + input_dend_i_sum_sr
+                    total_input[t, :, self.cg_idx['pfc_esoma']] += input_dend_e_sum_pfc + input_dend_i_sum_pfc
+                    next_h = (1-self.decay)*hidden + self.decay*gain*self.nonlinearity_soma(input_current=total_input[t, :, :] + self.mask_bias*self.bias, nonlinearity=self.activation, k_relu_satu=self.k_relu_satu) 
+            if self.time_it==True:
+                print('\tupdate soma takes {:.2e}s, cumulative {:.2e}s'.format(time.time()-start_updatesoma, time.time()-start), flush=True)   
+
+            
                 
             # add noise
             if self.time_it==True:
@@ -702,6 +726,13 @@ class BioRNN_working(torch.nn.Module):
 #             if kwargs['hp']['time_it']==True:
                 start_collect = time.time()
             hiddens.append(hidden)
+#             hidden_dict[t] = copy.deepcopy(hidden)    # test, delete later
+#             print('hidden_dict[t][dend_idx] = {}'.format(hidden[:, self.dend_idx]))
+#             print('hidden[dend]={}'.format(hidden[:, self.dend_idx]))
+#             print('shape of hidden: {}'.format(hidden.shape))
+#             print('mean of hidden={}'.format(torch.mean(hidden)))
+#             print('if there is non-zeros in hidden: {}'.format((hidden.detach().numpy()!=0).any()))
+#             print('hiddens={}'.format(hiddens))
             i_mes.append(i_me)
             if self.time_it==True:
                 print('\tcollect stuff takes {:.2e}s, cumulative {:.2e}s'.format(time.time()-start_collect, time.time()-start), flush=True)
@@ -717,6 +748,14 @@ class BioRNN_working(torch.nn.Module):
         
         last_states = {'hidden': h_last, 'i_me': i_me_last}
         record = {'hiddens': hiddens, 'i_mes': i_mes}
+        
+        hiddens = torch.stack(hiddens, dim=0).cpu().detach().numpy()
+#         print('shape of hiddens: {}'.format(hiddens.shape))
+#         print('the 6th timestep: {}'.format(hiddens[6, :, :][:, self.dend_idx]))
+#         print('if there is non-zeros in hiddens: {}'.format((hiddens!=0).any()))
+#         print('mean of hiddens: {}'.format(np.mean(hiddens)))
+#         for t in hidden_dict.keys():
+#             print('t={}, hidden={}, non-zero: {}'.format(t, hidden_dict[t][:, self.dend_idx], (hidden_dict[t]!=0).any()))
         
         return last_states, record
         

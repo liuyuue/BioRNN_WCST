@@ -56,16 +56,6 @@ def get_default_hp():
 
 
     hp = {
-            # batch size for training
-#             'batch_size_train': 64,
-            # batch_size for testing
-#             'batch_size_test': 512,
-            # input type: normal, multi
-#             'in_type': 'normal',
-            # Type of RNNs : LeakyRNN, LeakyGRU, EILeakyGRU, GRU, LSTM
-#             'rnn_type': 'LeakyRNN',
-            # whether rule and stimulus inputs are represented separately
-#             'use_separate_input': False,
             # Type of loss functions
             'loss_type': 'mse',
             # initialization: diagonal, orthogonal, kaiming_normal, kaiming_uniform, normal, uniform, constant
@@ -155,7 +145,7 @@ def get_default_hp():
             'n_switches': 3,
             'n_batches_per_block': int(2e8),
             'n_blocks': int(1),
-            'batch_size': int(10),
+            'batch_size': int(50),
 #             'batch_size_test': 1,
             'network_noise': 0.01,
             'input_noise_perceptual': 0.01,
@@ -188,6 +178,7 @@ def get_default_hp():
             'task': 'cxtdm',
             'jobname': 'testjob',    # determined by the batch file
             'timeit_print': False,
+            'resp_cue': False,    # whether or not to have an external cue to indicate the start of response (might be important for generalization across dt)
             'torch_seed': 1
             }
     
@@ -576,9 +567,10 @@ def test_frozen_weights(model, n_trials_test, switch_every_test, init_rule, hp, 
     
     hp_copy = copy.deepcopy(hp)    # to prevent changing hp
     hp_copy['network_noise'] = hp['network_noise']    # set the noise in testing
-    if noiseless==True:
-        hp_copy['network_noise'] = 0    # make the network noiseless
-        print('test with no network noise\n')
+#     if noiseless==True:
+#         hp_copy['network_noise'] = 0    # make the network noiseless
+#         print('test with no network noise\n')
+    # TODO: make clear what is means to test with no noise (I think should set model.rnn.network_noise = 0)
     if toprint==True:
         print('network noise in hp: {}'.format(hp['network_noise']), flush=True)
         print('network noise in hp_copy: {}'.format(hp_copy['network_noise']), flush=True)
@@ -674,6 +666,7 @@ def test_frozen_weights(model, n_trials_test, switch_every_test, init_rule, hp, 
             out, data = model(input=_x, init={'h': h_init, 'i_me': i_me_init}, trial_history=trial_history)
             rnn_activity = data['record']['hiddens']
             rnn_activity = torch.stack(rnn_activity, dim=0)
+#             print('in test_frozen_weight, mean of rnn_activity = {}'.format(torch.mean(rnn_activity)))
             h_last = data['last_states']['hidden']
             i_me_last = data['last_states']['i_me']
 #             print('printing data[record] shapes')
@@ -1587,7 +1580,7 @@ def generate_neural_data_test(model, n_trials_test, switch_every_test, hp_test, 
     # plot outputs
     
     if to_plot==True:
-        print(rnn_activity_concat.shape)
+#         print(rnn_activity_concat.shape)
 #         _rnn_activity_concat = torch.moveaxis(rnn_activity_concat, 1, 2)
         _rnn_activity_concat = rnn_activity_concat
         w_out_eff = (model.rnn.w_out*model.mask_out).detach().cpu().numpy()
@@ -2038,7 +2031,7 @@ def define_subpop_pfc(model, rnn_activity, hp_task, hp, rule_sel, err_sel, rule1
 def define_subpop_sr(model, rnn_activity, hp_task, hp, rule_sel, resp_sel, rule1_trs_stable, rule2_trs_stable, rule_threshold=0, resp_threshold=0, toprint=False):
     """ define subpopulations within SR """
 
-    cell_types_func = ['rule1', 'rule2', 'left', 'right']
+    cell_types_func = ['rule1', 'rule2', 'left', 'right']    # functional cell type
     cell_types = ['esoma', 'edend', 'pv', 'sst', 'vip']
     subcg_sr = [x+'_'+y for (x,y) in itertools.product(cell_types_func, cell_types)]
 

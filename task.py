@@ -53,7 +53,6 @@ def get_default_hp_cxtdm():
                 'trial_end': 800,
                 'trial_history_start': 0,
                 'trial_history_end': 100,
-                'resp_cue': False
                 }
 
     return hp_cxtdm
@@ -112,7 +111,7 @@ def make_task_siegel(hp, rule, n_trials, hp_cxtdm, trial_type='no_constraint'):
     trial_end_ts = int(hp_cxtdm['trial_end']/dt)  
             
     # check input dim
-    if (explicit_rule==True and n_in!=9) or (explicit_rule==False and n_in!=5):
+    if (explicit_rule==True and n_in!=9) or (explicit_rule==False and hp['resp_cue']==False and n_in!=5) or (explicit_rule==False and hp['resp_cue']==True and n_in!=6):
         raise ValueError('check input dimensionality!')
 
     # generate coherences
@@ -206,8 +205,8 @@ def make_task_siegel(hp, rule, n_trials, hp_cxtdm, trial_type='no_constraint'):
         x_rule[rule_start_ts:rule_end_ts, motion_rule_cue2_trs, 3] = 1
     
     # add a response cue
-#     if hp_cxtdm['resp_cue']==True:
-#         x[resp_cue_start_ts:resp_cue_end_ts, :, 5] = 1
+    if hp['resp_cue']==True:
+        x[resp_cue_start_ts:resp_cue_end_ts, :, 5] = 1
     
     
     # add noise to sensory input
