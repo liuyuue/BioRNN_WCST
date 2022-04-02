@@ -87,7 +87,7 @@ def train_bpxtrials_v2_working(hp):
     delay_var = 200    # variability in the delay. 200 ms
 
     # customize hp_task
-    hp_task = get_default_hp_cxtdm()
+    hp_task = get_default_hp_cxtdm()        
 
     # edit the name of the model
 #         customization=''
@@ -231,6 +231,8 @@ def train_bpxtrials_v2_working(hp):
             hp_task_var_delay['resp_start'] = hp_task['resp_start'] + np.random.uniform(low=-delay_var, high=delay_var)    # adjust this 
             hp_task_var_delay['resp_end'] = hp_task_var_delay['resp_start'] + (hp_task['resp_end']-hp_task['resp_start'])    # resp duration remains the same
             hp_task_var_delay['trial_end'] = hp_task_var_delay['resp_end']
+            hp_task_var_delay['resp_cue_start'] = hp_task_var_delay['resp_start']    # change the start of the response cue
+            hp_task_var_delay['resp_cue_end'] = hp_task_var_delay['resp_cue_start'] + (hp_task['resp_cue_end']-hp_task['resp_cue_start'])     # keep the duration of the response cue the same 
 
 
             # compute the trial history current
