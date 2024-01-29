@@ -7,4 +7,4 @@ The results in the paper can be reproduced by running the corresponding Jupyter 
 # Pretrained networks and data files
 Pretrained models and test data (which contains model activity and other information for a test session where the models performed 100 trials of Wisconsin Card Sorting Test) can be downloaded from 
 
-
+This code has been tested on Python 3.10.8 and Pytorch 1.13.1
