@@ -2,9 +2,12 @@
 Code used in the manuscript "Flexible gating between subspaces by a disinhibitory motif: a neural network model of internally guided task switching" (https://www.biorxiv.org/content/10.1101/2023.08.15.553375v5)
 
 # Reproducing the results in the paper
-The results in the paper can be reproduced by running the corresponding Jupyter notebooks. Remember to set the directories for model and test data
 
-# Pretrained networks and data files
-Pretrained models and test data (which contains model activity and other information for a test session where the models performed 100 trials of Wisconsin Card Sorting Test) can be downloaded from 
-
+## Accessing the pre-trained networks
+To start, download the pre-trained networks from ...
+## Run the trained network on a sequence of trials and save the test data
+Next, please run all the blocks in generate_data.ipynb to test the model on a series of trials and save the model activity as well as trial information. This takes about 30 secs per model on an M1 max Macbook.
+## Run the analyses
+Then, run the corresponding Jupyter notebook to reproduce the figures in the manuscript. Remember to replace the directories for model and test data with yours.
+# Software version
 This code has been tested on Python 3.10.8 and Pytorch 1.13.1
