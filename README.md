@@ -1,4 +1,3 @@
-# LiuWang2024
 Code used in the manuscript "Flexible gating between subspaces by a disinhibitory motif: a neural network model of internally guided task switching" (https://www.biorxiv.org/content/10.1101/2023.08.15.553375v5)
 
 # Reproducing the results in the paper
