@@ -19,9 +19,6 @@ import copy
 import scipy
 import matplotlib.pyplot as plt
 
-# This is added by VScode
-
-
 class BioRNN_working(torch.nn.Module):
     """ 
         RNN with elements from neurobiology
