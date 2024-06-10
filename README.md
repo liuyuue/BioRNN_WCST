@@ -3,7 +3,7 @@ Code used in the manuscript "Flexible gating between subspaces in a neural netwo
 # Reproducing the results in the paper
 
 ## Accessing the pre-trained networks
-To start, download the pre-trained networks and pre-processed data from https://drive.google.com/drive/folders/17LqvmcBynX0a4OtUgnkODGJKK_JFRB2Q?usp=drive_link.
+To start, download the trained networks and pre-processed data from https://drive.google.com/drive/folders/17LqvmcBynX0a4OtUgnkODGJKK_JFRB2Q?usp=drive_link.
 ## Run the analyses
 Then, run the corresponding Jupyter notebook to reproduce the figures in the paper.
 # Software version
