@@ -1,6 +1,6 @@
-Code used in the manuscript "Flexible gating between subspaces in a neural network model of internally guided task switching" (https://www.biorxiv.org/content/10.1101/2023.08.15.553375v5)
+Code used in the  "Flexible gating between subspaces in a neural network model of internally guided task switching" (https://www.nature.com/articles/s41467-024-50501-y)
 
-# Reproducing the results in the paper
+# Reproducing the results in the paper "Flexible gating between subspaces in a neural network model of internally guided task switching"
 
 ## Accessing the pre-trained networks
 To start, download the trained networks and pre-processed data from https://drive.google.com/drive/folders/17LqvmcBynX0a4OtUgnkODGJKK_JFRB2Q?usp=drive_link.
