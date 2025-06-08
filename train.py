@@ -23,9 +23,9 @@ from sklearn.manifold import MDS
 from sklearn.decomposition import PCA
 from sklearn.metrics.pairwise import cosine_similarity
 
-from task import *; from task_new import *
+from task import *;
 from functions import *
-from model_working import *
+from model import *
 
 
 # print(torch.__version__)

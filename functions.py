@@ -34,9 +34,9 @@ from textwrap import wrap
 
 # from model import *
 from task import *
-from model_working import *
+from model import *
 # from model_working_0320 import *
-from task_new import *
+from task import *
 
 # print(torch.__version__)
 # print(sys.version)
