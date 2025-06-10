@@ -25,7 +25,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from task import *;
 from functions import *
-from model import *
+from model_working import *
 
 
 # print(torch.__version__)
